@@ -1,0 +1,46 @@
+# =========================
+# Environment / Secrets
+# =========================
+*.env
+.env
+.env.*
+!.env.example
+
+# =========================
+# Docker / Volumes / Local data
+# =========================
+**/data/
+**/logs/
+**/tmp/
+**/*.log
+
+# Caso use bind mounts locais no futuro
+postgres_data/
+mongo_data/
+redis_data/
+kafka_data/
+rabbitmq_data/
+keycloak_db_data/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# =========================
+# Misc
+# =========================
+*.swp
+*.bak
+*.tmp
