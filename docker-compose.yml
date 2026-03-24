@@ -138,7 +138,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+      - ./Keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1" ]
       interval: 15s

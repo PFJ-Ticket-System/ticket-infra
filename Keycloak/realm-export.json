@@ -1,0 +1,67 @@
+{
+    "id": "ticket-realm",
+    "realm": "ticket",
+    "displayName": "Ticket Platform",
+    "enabled": true,
+    "sslRequired": "external",
+    "registrationAllowed": false,
+    "loginWithEmailAllowed": true,
+    "duplicateEmailsAllowed": false,
+    "resetPasswordAllowed": true,
+    "editUsernameAllowed": false,
+    "bruteForceProtected": true,
+    "accessTokenLifespan": 300,
+    "refreshTokenMaxReuse": 0,
+    "roles": {
+        "realm": [
+            {
+                "name": "admin",
+                "description": "Administrator role with full access",
+                "composite": false,
+                "clientRole": false
+            },
+            {
+                "name": "customer",
+                "description": "Regular customer role",
+                "composite": false,
+                "clientRole": false
+            }
+        ]
+    },
+    "clients": [
+        {
+            "clientId": "ticket-frontend",
+            "name": "Ticket Frontend",
+            "enabled": true,
+            "publicClient": true,
+            "standardFlowEnabled": true,
+            "directAccessGrantsEnabled": false,
+            "redirectUris": [
+                "http://localhost:3000/*",
+                "http://localhost:5000/*"
+            ],
+            "webOrigins": [
+                "http://localhost:3000",
+                "http://localhost:5000"
+            ],
+            "protocol": "openid-connect",
+            "attributes": {
+                "pkce.code.challenge.method": "S256"
+            }
+        },
+        {
+            "clientId": "ticket-gateway",
+            "name": "Ticket Gateway (Internal)",
+            "enabled": true,
+            "publicClient": false,
+            "standardFlowEnabled": false,
+            "serviceAccountsEnabled": true,
+            "directAccessGrantsEnabled": false,
+            "secret": "CHANGE_ME_BEFORE_RUNNING",
+            "protocol": "openid-connect"
+        }
+    ],
+    "defaultRoles": [
+        "customer"
+    ]
+}
