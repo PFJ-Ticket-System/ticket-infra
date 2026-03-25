@@ -75,7 +75,7 @@ services:
     volumes:
       - kafka_data:/bitnami/kafka
     healthcheck:
-      test: [ "CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1" ]
+      test: [ "CMD-SHELL", "echo > /dev/tcp/localhost/9092" ]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -121,9 +121,11 @@ services:
       - ticket-network
 
   keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    build:
+      context: ./keycloak
+      dockerfile: Dockerfile
     container_name: ticket-keycloak
-    command: start-dev --import-realm
+    command: start --optimized --import-realm
     restart: always
     depends_on:
       keycloak-db:
@@ -135,12 +137,15 @@ services:
       KC_DB_PASSWORD: ${KC_DB_PASSWORD}
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HOSTNAME: localhost
+      KC_HTTP_ENABLED: true
+      KC_HEALTH_ENABLED: true
     ports:
       - "8080:8080"
     volumes:
-      - ./Keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
     healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1" ]
+      test: [ "CMD-SHELL", "wget -q -O- http://localhost:8080/health/ready || exit 1" ]
       interval: 15s
       timeout: 10s
       retries: 5
