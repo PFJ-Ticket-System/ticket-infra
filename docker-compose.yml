@@ -151,9 +151,10 @@ services:
       KC_DB_PASSWORD: ${KC_DB_PASSWORD}
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      KC_HOSTNAME: ${KC_HOSTNAME}
+      KC_HOSTNAME_URL: ${KC_HOSTNAME_URL}
       KC_HTTP_ENABLED: true
       KC_HEALTH_ENABLED: true
+      KC_PROXY: edge
     ports:
       - "8080:8080"
     volumes:
