@@ -33,10 +33,17 @@ Thumbs.db
 # =========================
 .vscode/
 .idea/
+.vs/
 *.suo
 *.user
 *.userosscache
 *.sln.docstates
+
+# Visual Studio 2022+ Cache Files
+*.slnx.sqlite
+*.codechunks.db
+*.semanticsymbols.db
+*.vsidx
 
 # =========================
 # Misc
