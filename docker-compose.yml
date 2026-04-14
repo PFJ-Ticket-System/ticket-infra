@@ -81,6 +81,9 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_RETENTION_BYTES: 1073741824
+      KAFKA_LOG_SEGMENT_BYTES: 268435456
       CLUSTER_ID: ${KAFKA_CLUSTER_ID}
     volumes:
       - kafka_data:/var/lib/kafka/data
@@ -93,6 +96,20 @@ services:
       interval: 15s
       timeout: 10s
       retries: 5
+    networks:
+      - ticket-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: ticket-kafka-ui
+    restart: always
+    ports:
+      - "8081:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      - kafka
     networks:
       - ticket-network
 
