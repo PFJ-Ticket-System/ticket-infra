@@ -1,0 +1,69 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: local
+
+scrape_configs:
+  - job_name: ticket-gateway-api
+    static_configs:
+      - targets: ['host.docker.internal:5115']
+        labels:
+          service: ticket-gateway-api
+    metrics_path: /metrics
+
+  - job_name: ticket-event-service
+    static_configs:
+      - targets: ['host.docker.internal:5100']
+        labels:
+          service: ticket-event-service
+    metrics_path: /metrics
+
+  - job_name: ticket-order-service
+    static_configs:
+      - targets: ['host.docker.internal:5002']
+        labels:
+          service: ticket-order-service
+    metrics_path: /metrics
+
+  - job_name: ticket-payment-service
+    static_configs:
+      - targets: ['host.docker.internal:5003']
+        labels:
+          service: ticket-payment-service
+    metrics_path: /metrics
+
+  - job_name: ticket-admin-api
+    static_configs:
+      - targets: ['host.docker.internal:5005']
+        labels:
+          service: ticket-admin-api
+    metrics_path: /metrics
+
+  - job_name: ticket-notification-service
+    static_configs:
+      - targets: ['host.docker.internal:5004']
+        labels:
+          service: ticket-notification-service
+    metrics_path: /metrics
+
+  - job_name: ticket-event-worker
+    static_configs:
+      - targets: ['host.docker.internal:9100']
+        labels:
+          service: ticket-event-worker
+    metrics_path: /metrics
+
+  - job_name: ticket-order-worker
+    static_configs:
+      - targets: ['host.docker.internal:9101']
+        labels:
+          service: ticket-order-worker
+    metrics_path: /metrics
+
+  - job_name: ticket-payment-worker
+    static_configs:
+      - targets: ['host.docker.internal:9102']
+        labels:
+          service: ticket-payment-worker
+    metrics_path: /metrics

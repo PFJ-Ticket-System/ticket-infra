@@ -7,12 +7,42 @@ services:
       POSTGRES_DB: ticket
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TICKET_DB_PASSWORD: ${TICKET_DB_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ticket-network
+
+  pgbouncer:
+    image: pgbouncer/pgbouncer:1.22.1
+    container_name: ticket-pgbouncer
+    restart: always
+    # Generates userlist.txt from TICKET_DB_PASSWORD env var, then starts PgBouncer.
+    # userlist.txt is not committed — the password lives only in the .env file.
+    entrypoint: >
+      sh -c "
+        printf '\"ticket\" \"%s\"\n' \"$$TICKET_DB_PASSWORD\" > /etc/pgbouncer/userlist.txt &&
+        pgbouncer /etc/pgbouncer/pgbouncer.ini
+      "
+    environment:
+      TICKET_DB_PASSWORD: ${TICKET_DB_PASSWORD}
+    ports:
+      - "6432:5432"
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 5432 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -78,7 +108,7 @@ services:
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9094
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: false
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_LOG_DIRS: /var/lib/kafka/data
       KAFKA_LOG_RETENTION_HOURS: 168
@@ -96,6 +126,47 @@ services:
       interval: 15s
       timeout: 10s
       retries: 5
+    networks:
+      - ticket-network
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: ticket-kafka-init
+    restart: on-failure
+    depends_on:
+      kafka:
+        condition: service_healthy
+    # Creates all topics with 4 partitions. Runs once and exits.
+    # DLQ topics use 1 partition — they are low-traffic dead-letter destinations.
+    # restart: on-failure retries the container if Kafka was not yet ready despite the healthcheck.
+    command: >
+      bash -c "
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic events.event-created   --partitions 4 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic events.event-updated   --partitions 4 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic events.event-cancelled --partitions 4 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic orders.order-created   --partitions 4 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic orders.order-confirmed --partitions 4 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic orders.order-cancelled --partitions 4 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic orders.order-expired   --partitions 4 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic orders.order-failed    --partitions 4 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic payment.payment-captured --partitions 4 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic payment.payment-failed   --partitions 4 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic events.event-created.dlq   --partitions 1 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic events.event-updated.dlq   --partitions 1 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic events.event-cancelled.dlq --partitions 1 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic orders.order-created.dlq   --partitions 1 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic orders.order-confirmed.dlq --partitions 1 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic orders.order-cancelled.dlq --partitions 1 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic orders.order-expired.dlq   --partitions 1 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic orders.order-failed.dlq    --partitions 1 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic payment.payment-captured.dlq --partitions 1 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic payment.payment-failed.dlq   --partitions 1 --replication-factor 1 &&
+        echo 'All Kafka topics created.' &&
+        echo 'Verifying topics...' &&
+        TOPIC_COUNT=$$(kafka-topics --bootstrap-server kafka:9092 --list | wc -l) &&
+        echo \"Topic count: $$TOPIC_COUNT\" &&
+        [ \"$$TOPIC_COUNT\" -ge 20 ] && echo 'All Kafka topics verified.' || (echo 'ERROR: topic count mismatch' && exit 1)
+      "
     networks:
       - ticket-network
 
@@ -177,11 +248,101 @@ services:
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
     healthcheck:
-      test: ["CMD-SHELL", "echo > /dev/tcp/localhost/8080 || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:8080/health/ready || exit 1"
+        ]
       interval: 15s
       timeout: 10s
-      retries: 5
-      start_period: 40s
+      retries: 10
+      start_period: 60s
+    networks:
+      - ticket-network
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: ticket-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - ticket-network
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: ticket-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3001
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - ticket-network
+
+  flyway:
+    image: flyway/flyway:10-alpine
+    container_name: ticket-flyway
+    restart: on-failure
+    command: migrate
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/ticket
+      FLYWAY_USER: ticket
+      FLYWAY_PASSWORD: ${TICKET_DB_PASSWORD}
+      FLYWAY_SCHEMAS: events,orders,payments
+      FLYWAY_CONNECT_RETRIES: "10"
+      FLYWAY_VALIDATE_ON_MIGRATE: "true"
+      FLYWAY_BASELINE_ON_MIGRATE: "false"
+      FLYWAY_OUT_OF_ORDER: "false"
+      FLYWAY_LOCATIONS: "filesystem:/flyway/sql"
+    volumes:
+      - ./migrations:/flyway/sql
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ticket-network
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.101.0
+    container_name: ticket-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - ticket-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: ticket-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
     networks:
       - ticket-network
 
@@ -192,6 +353,8 @@ volumes:
   kafka_data:
   rabbitmq_data:
   keycloak_db_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   ticket-network:

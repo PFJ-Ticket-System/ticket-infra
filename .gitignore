@@ -7,12 +7,25 @@
 !.env.example
 
 # =========================
+# Generated runtime files
+# =========================
+# PgBouncer userlist.txt is generated at container start from TICKET_DB_PASSWORD.
+# It is never committed — the password lives only in the .env file.
+postgres/userlist.txt
+pgbouncer/userlist.txt
+
+# =========================
 # Docker / Volumes / Local data
 # =========================
 **/data/
 **/logs/
 **/tmp/
 **/*.log
+
+# Database backup dumps
+backup/*.sql
+backup/*.dump
+backup/*.bak
 
 # Caso use bind mounts locais no futuro
 postgres_data/
